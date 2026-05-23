@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartPark HUD // Command Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --cyan: #00f0ff; --green: #00ff88; --red: #ff3366; --amber: #ffaa00; --bg-dark: #06080f; --bg-card: rgba(10, 18, 32, 0.85); }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg-dark); color: #e0e8f0; height: 100vh; overflow: hidden; }
+
+        body::after { content: ''; position: fixed; inset: 0; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 240, 255, 0.015) 2px, rgba(0, 240, 255, 0.015) 4px); pointer-events: none; z-index: 9999; }
+        body::before { content: ''; position: fixed; inset: 0; background-image: linear-gradient(rgba(0,240,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,240,255,0.03) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; z-index: 0; }
+        ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: var(--bg-dark); } ::-webkit-scrollbar-thumb { background: var(--cyan); border-radius: 3px; }
+
+        .hud-card { background: var(--bg-card); border: 1px solid rgba(0, 240, 255, 0.15); position: relative; clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px)); }
+        .hud-card::before { content: ''; position: absolute; top: 0; right: 0; width: 12px; height: 12px; background: linear-gradient(135deg, transparent 50%, rgba(0,240,255,0.3) 50%); }
+        .hud-card::after { content: ''; position: absolute; bottom: 0; left: 0; width: 12px; height: 12px; background: linear-gradient(135deg, rgba(0,240,255,0.3) 50%, transparent 50%); }
+
+        .hud-input { background: rgba(0, 240, 255, 0.05); border: 1px solid rgba(0, 240, 255, 0.2); color: var(--cyan); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.15em; transition: all 0.3s; }
+        .hud-input:focus { outline: none; border-color: var(--cyan); box-shadow: 0 0 15px rgba(0,240,255,0.15), inset 0 0 15px rgba(0,240,255,0.05); }
+        .hud-input::placeholder { color: rgba(0,240,255,0.3); font-family: 'Inter', sans-serif; text-transform: none; letter-spacing: normal; }
+
+        .hud-btn { background: linear-gradient(135deg, rgba(0,240,255,0.15), rgba(0,240,255,0.05)); border: 1px solid var(--cyan); color: var(--cyan); font-family: 'Orbitron', sans-serif; text-transform: uppercase; letter-spacing: 0.1em; overflow: hidden; transition: all 0.3s; cursor: pointer; }
+        .hud-btn:hover { background: linear-gradient(135deg, rgba(0,240,255,0.25), rgba(0,240,255,0.1)); box-shadow: 0 0 20px rgba(0,240,255,0.2); }
+        .hud-btn:active { transform: scale(0.98); }
+        .hud-btn-danger { background: linear-gradient(135deg, rgba(255,51,102,0.15), rgba(255,51,102,0.05)); border-color: var(--red); color: var(--red); }
+        .hud-btn-danger:hover { background: linear-gradient(135deg, rgba(255,51,102,0.25), rgba(255,51,102,0.1)); box-shadow: 0 0 20px rgba(255,51,102,0.2); }
+        .hud-btn-green { background: linear-gradient(135deg, rgba(0,255,136,0.15), rgba(0,255,136,0.05)); border-color: var(--green); color: var(--green); }
+        .hud-btn-green:hover { background: linear-gradient(135deg, rgba(0,255,136,0.25), rgba(0,255,136,0.1)); box-shadow: 0 0 20px rgba(0,255,136,0.2); }
+        .hud-btn-amber { background: linear-gradient(135deg, rgba(255,170,0,0.15), rgba(255,170,0,0.05)); border-color: var(--amber); color: var(--amber); }
+        .hud-btn-amber:hover { background: linear-gradient(135deg, rgba(255,170,0,0.25), rgba(255,170,0,0.1)); box-shadow: 0 0 20px rgba(255,170,0,0.2); }
+
+        .slot-unit { transition: all 0.2s; cursor: pointer; }
+        .slot-available { border: 1px solid rgba(0,255,136,0.3); background: rgba(0,255,136,0.03); }
+        .slot-available:hover { border-color: var(--green); background: rgba(0,255,136,0.1); box-shadow: 0 0 15px rgba(0,255,136,0.15); transform: translateY(-2px); }
+        .slot-available.selected { border: 2px solid var(--cyan); background: rgba(0,240,255,0.1); box-shadow: 0 0 25px rgba(0,240,255,0.3); transform: translateY(-3px); }
+        .slot-occupied { border: 1px solid rgba(255,51,102,0.2); background: rgba(255,51,102,0.03); cursor: not-allowed; opacity: 0.6; }
+
+        .glow-cyan { text-shadow: 0 0 8px rgba(0,240,255,0.5); } .glow-green { text-shadow: 0 0 8px rgba(0,255,136,0.5); } .glow-red { text-shadow: 0 0 8px rgba(255,51,102,0.5); } .glow-amber { text-shadow: 0 0 8px rgba(255,170,0,0.5); }
+
+        @keyframes hudPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } } .hud-pulse { animation: hudPulse 2s ease-in-out infinite; }
+        @keyframes selectPulse { 0%, 100% { box-shadow: 0 0 15px rgba(0,240,255,0.2); } 50% { box-shadow: 0 0 30px rgba(0,240,255,0.5); } } .selected-pulse { animation: selectPulse 1.5s ease-in-out infinite; }
+
+        .vtype-btn { border: 1px solid rgba(0,240,255,0.15); background: rgba(0,240,255,0.03); transition: all 0.3s; cursor: pointer; }
+        .vtype-btn:hover { border-color: rgba(0,240,255,0.4); background: rgba(0,240,255,0.08); }
+        .vtype-btn.active { border-color: var(--cyan); background: rgba(0,240,255,0.12); box-shadow: 0 0 15px rgba(0,240,255,0.15); }
+
+        .nav-item { transition: all 0.2s; border-left: 2px solid transparent; }
+        .nav-item:hover { background: rgba(0,240,255,0.05); border-left-color: rgba(0,240,255,0.3); }
+        .nav-item.active { background: rgba(0,240,255,0.1); border-left-color: var(--cyan); color: var(--cyan); }
+
+        .toast-hud { animation: slideDown 0.3s ease-out, fadeOutHud 0.3s ease 3s forwards; }
+        @keyframes slideDown { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes fadeOutHud { from { opacity: 1; } to { opacity: 0; } }
+
+        .panel { display: none; height: 100%; } .panel.active { display: flex; }
+    </style>
+</head>
+<body class="flex">
+
+    <div id="toast-container" class="fixed top-4 right-4 z-[9998] flex flex-col gap-2 w-80"></div>
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="w-56 h-screen flex flex-col border-r border-cyan-400/10 bg-[#05070d] z-10 flex-shrink-0">
+        <div class="p-4 border-b border-cyan-400/10 flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded border border-cyan-400/30 bg-cyan-400/5 flex items-center justify-center"><i class="fas fa-parking text-cyan-400 text-sm glow-cyan"></i></div>
+            <div><h1 class="font-hud text-sm font-bold tracking-wider text-cyan-400 glow-cyan leading-none">SMARTPARK</h1><p class="font-mono text-[8px] text-cyan-400/30 tracking-widest">COMMAND CENTER</p></div>
+        </div>
+        <div class="px-4 py-3 border-b border-cyan-400/10">
+            <div class="flex items-center justify-between mb-1"><span class="font-mono text-[9px] text-cyan-400/40 tracking-wider">SYSTEM</span><div class="flex items-center gap-1.5"><div class="w-1.5 h-1.5 rounded-full bg-green-400 hud-pulse"></div><span class="font-mono text-[9px] text-green-400/70">ONLINE</span></div></div>
+            <div class="w-full h-1 rounded-full bg-cyan-400/10 mt-1"><div class="rounded-full h-full bg-gradient-to-r from-cyan-400 to-green-400" id="sidebar-bar" style="width:0%"></div></div>
+            <div class="flex justify-between mt-1"><span class="font-mono text-[8px] text-cyan-400/30">OCC: <span id="sidebar-occ">0</span>%</span><span class="font-mono text-[8px] text-cyan-400/30" id="sidebar-time">--:--:--</span></div>
+        </div>
+        <nav class="flex-1 py-2">
+            <div class="px-3 mb-1"><span class="font-mono text-[8px] text-cyan-400/20 tracking-widest">MONITOR</span></div>
+            <button onclick="switchPanel('dashboard')" id="nav-dashboard" class="nav-item active w-full text-left px-4 py-2.5 flex items-center gap-3 text-sm"><i class="fas fa-th-large w-4 text-center text-xs"></i> Dashboard</button>
+            <div class="px-3 mt-3 mb-1"><span class="font-mono text-[8px] text-cyan-400/20 tracking-widest">OPERATIONS</span></div>
+            <button onclick="switchPanel('entry')" id="nav-entry" class="nav-item w-full text-left px-4 py-2.5 flex items-center gap-3 text-sm text-gray-400"><i class="fas fa-sign-in-alt w-4 text-center text-xs"></i> Deploy Entry</button>
+            <button onclick="switchPanel('exit')" id="nav-exit" class="nav-item w-full text-left px-4 py-2.5 flex items-center gap-3 text-sm text-gray-400"><i class="fas fa-sign-out-alt w-4 text-center text-xs"></i> Process Exit</button>
+            <div class="px-3 mt-3 mb-1"><span class="font-mono text-[8px] text-cyan-400/20 tracking-widest">ANALYTICS</span></div>
+            <button onclick="switchPanel('reports')" id="nav-reports" class="nav-item w-full text-left px-4 py-2.5 flex items-center gap-3 text-sm text-gray-400"><i class="fas fa-file-alt w-4 text-center text-xs"></i> Reports</button>
+        </nav>
+        <div class="p-3 border-t border-cyan-400/10 text-center"><p class="font-mono text-[8px] text-cyan-400/15 tracking-widest">SMARTPARK v2.1</p></div>
+    </aside>
+
+    <!-- ============ MAIN CONTENT ============ -->
+    <main class="flex-1 h-screen overflow-y-auto p-6 relative z-10">
+
+        <!-- ==================== DASHBOARD ==================== -->
+        <div id="panel-dashboard" class="panel active flex-col gap-5">
+            <div class="grid grid-cols-4 gap-4">
+                <div class="hud-card rounded-md p-4 flex justify-between items-start"><div><p class="font-mono text-[9px] text-cyan-400/40 tracking-wider">TOTAL SLOTS</p><p class="font-hud text-3xl text-cyan-400 glow-cyan mt-1" id="stat-total">0</p></div><div class="w-8 h-8 rounded border border-cyan-400/20 flex items-center justify-center"><i class="fas fa-border-all text-cyan-400/50 text-xs"></i></div></div>
+                <div class="hud-card rounded-md p-4 flex justify-between items-start"><div><p class="font-mono text-[9px] text-green-400/40 tracking-wider">AVAILABLE</p><p class="font-hud text-3xl text-green-400 glow-green mt-1" id="stat-avail">0</p></div><div class="w-8 h-8 rounded border border-green-400/20 flex items-center justify-center"><i class="fas fa-check-circle text-green-400/50 text-xs"></i></div></div>
+                <div class="hud-card rounded-md p-4 flex justify-between items-start"><div><p class="font-mono text-[9px] text-red-400/40 tracking-wider">OCCUPIED</p><p class="font-hud text-3xl text-red-400 glow-red mt-1" id="stat-occ">0</p></div><div class="w-8 h-8 rounded border border-red-400/20 flex items-center justify-center"><i class="fas fa-car text-red-400/50 text-xs"></i></div></div>
+                <div class="hud-card rounded-md p-4 flex justify-between items-start"><div><p class="font-mono text-[9px] text-amber-400/40 tracking-wider">OCCUPANCY</p><p class="font-hud text-3xl text-amber-400 mt-1" id="stat-rate">0%</p></div><div class="w-8 h-8 rounded border border-amber-400/20 flex items-center justify-center"><i class="fas fa-chart-pie text-amber-400/50 text-xs"></i></div></div>
+            </div>
+            <div class="grid grid-cols-3 gap-5 flex-1 min-h-0">
+                <div class="col-span-2 hud-card rounded-md p-5 flex flex-col overflow-hidden">
+                    <div class="flex items-center justify-between mb-4 border-b border-cyan-400/10 pb-3"><h3 class="font-hud text-xs tracking-widest text-cyan-400/60 flex items-center gap-2"><i class="fas fa-map text-cyan-400/40"></i> LIVE FACILITY MAP</h3><div class="flex gap-4 text-[9px]"><span class="flex items-center gap-1 text-green-400/60"><div class="w-2 h-2 rounded-sm bg-green-400/30 border border-green-400/50"></div>Open</span><span class="flex items-center gap-1 text-red-400/60"><div class="w-2 h-2 rounded-sm bg-red-400/20 border border-red-400/30"></div>Full</span></div></div>
+                    <div class="flex-1 overflow-y-auto pr-2 space-y-5" id="dashboard-map"></div>
+                </div>
+                <div class="col-span-1 hud-card rounded-md p-5 flex flex-col overflow-hidden">
+                    <h3 class="font-hud text-xs tracking-widest text-cyan-400/60 mb-4 border-b border-cyan-400/10 pb-3 flex items-center gap-2"><i class="fas fa-stream text-cyan-400/40"></i> ACTIVITY LOG</h3>
+                    <div class="flex-1 overflow-y-auto">
+                        <table class="w-full text-left text-[11px]">
+                            <thead class="text-[8px] text-cyan-400/30 uppercase border-b border-cyan-400/10 sticky top-0 bg-[#06080f] z-10">
+                                <tr><th class="py-2 px-1.5">Slot</th><th class="py-2 px-1.5">Plate</th><th class="py-2 px-1.5">Owner</th><th class="py-2 px-1.5">Type</th><th class="py-2 px-1.5">Time</th></tr>
+                            </thead>
+                            <tbody id="log-tbody" class="text-gray-400"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== ENTRY ==================== -->
+        <div id="panel-entry" class="panel flex-col gap-5">
+            <div class="grid grid-cols-3 gap-5 h-full">
+                <div class="hud-card rounded-md p-6 flex flex-col">
+                    <h3 class="font-hud text-xs tracking-widest text-cyan-400/60 mb-5 flex items-center gap-2"><i class="fas fa-sign-in-alt text-cyan-400/40"></i> VEHICLE DEPLOYMENT</h3>
+                    <form id="entry-form" class="flex-1 flex flex-col gap-4" onsubmit="return false;">
+                        <div><label class="font-mono text-[9px] text-cyan-400/40 tracking-wider block mb-1.5">PLATE NUMBER</label><input type="text" id="entry-plate" class="hud-input w-full text-center text-xl py-3 rounded" placeholder="ABC-1234" maxlength="10"></div>
+                        <div><label class="font-mono text-[9px] text-cyan-400/40 tracking-wider block mb-1.5">OWNER NAME</label><input type="text" id="entry-owner" class="hud-input w-full text-sm py-2.5 px-3 rounded" placeholder="Full Name" style="text-transform:none;letter-spacing:normal"></div>
+                        <div><label class="font-mono text-[9px] text-cyan-400/40 tracking-wider block mb-1.5">VEHICLE TYPE</label><div class="grid grid-cols-4 gap-1.5"><button type="button" class="vtype-btn active rounded py-2 text-center" data-type="Car" onclick="selectVType(this)"><i class="fas fa-car text-cyan-400 text-xs block mb-0.5"></i><span class="font-mono text-[8px] text-cyan-400/60">CAR</span></button><button type="button" class="vtype-btn rounded py-2 text-center" data-type="Motorcycle" onclick="selectVType(this)"><i class="fas fa-motorcycle text-cyan-400 text-xs block mb-0.5"></i><span class="font-mono text-[8px] text-cyan-400/60">MOTO</span></button><button type="button" class="vtype-btn rounded py-2 text-center" data-type="Van" onclick="selectVType(this)"><i class="fas fa-shuttle-van text-cyan-400 text-xs block mb-0.5"></i><span class="font-mono text-[8px] text-cyan-400/60">VAN</span></button><button type="button" class="vtype-btn rounded py-2 text-center" data-type="Truck" onclick="selectVType(this)"><i class="fas fa-truck text-cyan-400 text-xs block mb-0.5"></i><span class="font-mono text-[8px] text-cyan-400/60">TRUCK</span></button></div></div>
+                        <div class="flex-1"></div>
+                        <div id="entry-selected-box" class="hidden border-2 border-cyan-400/50 bg-cyan-400/5 rounded p-4 text-center mb-2 selected-pulse">
+                            <p class="font-mono text-[9px] text-cyan-400/60 tracking-wider mb-1">TARGET SLOT LOCKED</p>
+                            <p class="font-hud text-4xl text-cyan-400 glow-cyan" id="entry-selected-slot">---</p>
+                        </div>
+                        <button type="button" id="entry-confirm-btn" onclick="confirmEntry()" class="hud-btn-green hud-btn w-full py-3 rounded text-xs hidden">CONFIRM DEPLOYMENT</button>
+                    </form>
+                </div>
+                <div class="col-span-2 hud-card rounded-md p-6 flex flex-col">
+                    <div class="flex items-center justify-between mb-4 border-b border-cyan-400/10 pb-3">
+                        <h3 class="font-hud text-xs tracking-widest text-cyan-400/60 flex items-center gap-2"><i class="fas fa-crosshairs text-cyan-400/40"></i> SELECT PARKING ZONE</h3>
+                        <span class="font-mono text-[10px] text-green-400/60 bg-green-400/5 border border-green-400/20 px-2.5 py-1 rounded">OPEN SLOTS: <span id="entry-avail-count" class="text-green-400 font-bold">0</span></span>
+                    </div>
+                    <div class="flex-1 overflow-y-auto pr-2" id="entry-map"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== EXIT ==================== -->
+        <div id="panel-exit" class="panel flex-col gap-5">
+            <div class="grid grid-cols-3 gap-5 h-full">
+                <div class="hud-card rounded-md p-6 flex flex-col">
+                    <h3 class="font-hud text-xs tracking-widest text-red-400/60 mb-5 flex items-center gap-2"><i class="fas fa-sign-out-alt text-red-400/40"></i> PROCESS CLEARANCE</h3>
+                    <div id="exit-form-section">
+                        <div class="mb-4"><label class="font-mono text-[9px] text-red-400/40 tracking-wider block mb-1.5">PLATE NUMBER</label><input type="text" id="exit-plate" class="hud-input w-full text-center text-xl py-3 rounded" placeholder="ABC-1234" maxlength="10" style="border-color:rgba(255,51,102,0.3);color:var(--red)"></div>
+                        <button onclick="processExit()" class="hud-btn-danger hud-btn w-full py-3 rounded text-xs">EXECUTE EXIT</button>
+                    </div>
+                    <div id="exit-receipt" class="hidden flex-1 flex flex-col mt-6">
+                        <div class="border-b border-cyan-400/10 pb-3 mb-3 text-center"><i class="fas fa-check-circle text-2xl text-green-400 glow-green mb-2"></i><h4 class="font-hud text-sm text-green-400 glow-green">CLEARANCE COMPLETE</h4></div>
+                        <div class="space-y-3 flex-1 font-mono text-sm">
+                            <div class="flex justify-between"><span class="text-cyan-400/40">PLATE</span><span id="rec-plate" class="text-cyan-400">---</span></div>
+                            <div class="flex justify-between"><span class="text-cyan-400/40">SLOT</span><span id="rec-slot" class="text-cyan-400/80">---</span></div>
+                            <div class="flex justify-between"><span class="text-cyan-400/40">DURATION</span><span id="rec-duration" class="text-cyan-400/80">---</span></div>
+                            <div class="flex justify-between border-t border-cyan-400/10 pt-3 mt-3"><span class="text-amber-400/60">TOTAL FEE</span><span class="font-hud text-xl text-amber-400" style="text-shadow: 0 0 15px rgba(255,170,0,0.4)" id="rec-fee">$0.00</span></div>
+                        </div>
+                        <button onclick="resetExit()" class="hud-btn w-full py-2.5 rounded text-[10px] mt-4">PROCESS ANOTHER</button>
+                    </div>
+                </div>
+                <div class="col-span-2 hud-card rounded-md p-6 flex flex-col">
+                    <h3 class="font-hud text-xs tracking-widest text-cyan-400/60 mb-4">CURRENTLY DEPLOYED</h3>
+                    <div class="flex-1 overflow-y-auto pr-2" id="exit-parked-list"><p class="text-xs text-cyan-400/20 text-center py-8 font-mono">Loading data...</p></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== REPORTS ==================== -->
+        <div id="panel-reports" class="panel flex-col gap-5">
+            <div class="grid grid-cols-2 gap-8 h-full items-center">
+                <!-- PDF Report -->
+                <div class="hud-card rounded-lg p-8 flex flex-col items-center justify-center text-center h-80 transition-all hover:border-amber-400/30">
+                    <div class="w-16 h-16 rounded-full border-2 border-amber-400/20 bg-amber-400/5 flex items-center justify-center mb-5">
+                        <i class="fas fa-file-pdf text-3xl text-amber-400 glow-amber"></i>
+                    </div>
+                    <h3 class="font-hud text-lg tracking-widest text-amber-400 mb-2">DAILY PDF REPORT</h3>
+                    <p class="font-mono text-[11px] text-cyan-400/40 mb-8 max-w-xs">Generate and view an official document summarizing today's revenue, cleared vehicles, and duration logs.</p>
+                    <button onclick="generateReport('pdf')" class="hud-btn-amber hud-btn py-3 px-8 rounded text-xs">
+                        <i class="fas fa-eye mr-2"></i> VIEW PDF REPORT
+                    </button>
+                </div>
+
+                <!-- CSV Report -->
+                <div class="hud-card rounded-lg p-8 flex flex-col items-center justify-center text-center h-80 transition-all hover:border-green-400/30">
+                    <div class="w-16 h-16 rounded-full border-2 border-green-400/20 bg-green-400/5 flex items-center justify-center mb-5">
+                        <i class="fas fa-file-csv text-3xl text-green-400 glow-green"></i>
+                    </div>
+                    <h3 class="font-hud text-lg tracking-widest text-green-400 mb-2">DAILY CSV REPORT</h3>
+                    <p class="font-mono text-[11px] text-cyan-400/40 mb-8 max-w-xs">Export raw tabular data of today's transactions. Ideal for spreadsheet analysis and record keeping.</p>
+                    <button onclick="generateReport('csv')" class="hud-btn-green hud-btn py-3 px-8 rounded text-xs">
+                        <i class="fas fa-download mr-2"></i> DOWNLOAD CSV
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+<script>
+    let parkingData = []; let statsData = {}; let selectedSlotId = null; let selectedSlotName = ''; let currentType = 'Car';
+
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchSlotData(); updateHudTime();
+        setInterval(fetchSlotData, 8000); setInterval(updateHudTime, 1000);
+        document.getElementById('entry-plate').addEventListener('keydown', e => { if(e.key === 'Enter') document.getElementById('entry-owner').focus(); });
+        document.getElementById('exit-plate').addEventListener('keydown', e => { if(e.key === 'Enter') processExit(); });
+    });
+
+    function updateHudTime() { document.getElementById('sidebar-time').textContent = new Date().toLocaleTimeString('en-US', { hour12: false }); }
+
+    function switchPanel(id) {
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active')); document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        document.getElementById('panel-' + id).classList.add('active'); document.getElementById('nav-' + id).classList.add('active');
+        if(id === 'entry') { selectedSlotId = null; document.getElementById('entry-selected-box').classList.add('hidden'); document.getElementById('entry-confirm-btn').classList.add('hidden'); renderEntryMap(); }
+        if(id === 'exit') { resetExit(); renderExitList(); }
+    }
+
+    async function fetchSlotData() {
+        try { const [slotsRes, statsRes] = await Promise.all([fetch('/api/slots'), fetch('/api/stats')]); parkingData = await slotsRes.json(); statsData = await statsRes.json(); updateDashboard(); } catch (err) { console.error('Fetch error:', err); }
+    }
+
+    function updateDashboard() {
+        const s = statsData;
+        document.getElementById('stat-total').textContent = s.total || 0; document.getElementById('stat-avail').textContent = s.available || 0;
+        document.getElementById('stat-occ').textContent = s.occupied || 0; document.getElementById('stat-rate').textContent = (s.occupancy_rate || 0) + '%';
+        document.getElementById('sidebar-occ').textContent = s.occupancy_rate || 0;
+        const bar = document.getElementById('sidebar-bar'); const pct = s.total > 0 ? (s.occupied / s.total) * 100 : 0; bar.style.width = pct + '%';
+        bar.style.background = pct > 80 ? 'linear-gradient(90deg, var(--amber), var(--red))' : 'linear-gradient(90deg, var(--cyan), var(--green))';
+        renderDashboardMap(); renderDashboardLog();
+    }
+
+    function renderDashboardMap() {
+        const container = document.getElementById('dashboard-map'); container.innerHTML = '';
+        const types = ['Car', 'Motorcycle', 'Van', 'Truck']; const icons = { Car: 'fa-car', Motorcycle: 'fa-motorcycle', Van: 'fa-shuttle-van', Truck: 'fa-truck' };
+        types.forEach(type => {
+            const slots = parkingData.filter(s => s.slot_type === type); const openSlots = slots.filter(s => s.status === 'Available').length;
+            const section = document.createElement('div'); section.className = 'border-b border-cyan-400/10 pb-4 last:border-0 last:pb-0';
+            const header = document.createElement('div'); header.className = 'flex items-center justify-between mb-3';
+            header.innerHTML = `<div class="flex items-center gap-2"><i class="fas ${icons[type]} text-cyan-400/50 text-sm"></i><span class="font-hud text-[10px] tracking-[0.3em] text-cyan-400/50 uppercase">${type} Zone</span></div><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full ${openSlots > 0 ? 'bg-green-400' : 'bg-red-400'}"></span><span class="font-mono text-[10px] ${openSlots > 0 ? 'text-green-400/60' : 'text-red-400/60'}">${openSlots} OPEN</span></div>`;
+            section.appendChild(header);
+            const grid = document.createElement('div'); grid.className = 'grid grid-cols-5 gap-2';
+            slots.forEach(slot => {
+                const isAvailable = slot.status === 'Available'; const div = document.createElement('div');
+                div.className = `rounded border p-2 flex flex-col items-center justify-center h-14 transition-all ${isAvailable ? 'border-green-400/30 bg-green-400/5 hover:bg-green-400/10' : 'border-red-400/20 bg-red-400/5'}`;
+                const mainLabel = isAvailable ? slot.slot_number : (slot.vehicle ? slot.vehicle.plate : '---');
+                const subLabel = isAvailable ? 'OPEN' : (slot.vehicle ? slot.vehicle.owner.split(' ')[0] : '');
+                div.innerHTML = `<span class="font-mono text-[10px] font-bold ${isAvailable ? 'text-green-400/80' : 'text-red-400/60'} tracking-wider">${mainLabel}</span><span class="font-mono text-[7px] mt-0.5 ${isAvailable ? 'text-green-400/40' : 'text-red-400/30'} uppercase truncate w-full text-center">${subLabel}</span>`;
+                grid.appendChild(div);
+            });
+            section.appendChild(grid); container.appendChild(section);
+        });
+    }
+
+    function renderDashboardLog() {
+        const tbody = document.getElementById('log-tbody'); tbody.innerHTML = '';
+        const occupied = parkingData.filter(s => s.status === 'Occupied');
+        if(occupied.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-cyan-400/20 font-mono text-[10px]">NO ACTIVE DEPLOYMENTS</td></tr>`; return; }
+        occupied.forEach(slot => {
+            const tr = document.createElement('tr'); tr.className = 'border-b border-cyan-400/5 hover:bg-cyan-400/[.03] transition-colors';
+            tr.innerHTML = `<td class="py-2.5 px-1.5 font-mono text-cyan-400/60 font-bold">${slot.slot_number}</td><td class="py-2.5 px-1.5 font-mono text-cyan-400 font-bold">${slot.vehicle.plate}</td><td class="py-2.5 px-1.5 text-white font-semibold truncate max-w-[90px]">${slot.vehicle.owner}</td><td class="py-2.5 px-1.5"><span class="bg-cyan-400/10 text-cyan-400/70 text-[8px] px-1.5 py-0.5 rounded">${slot.slot_type}</span></td><td class="py-2.5 px-1.5 font-mono text-cyan-400/40 text-[10px]">${slot.vehicle.time_in}</td>`;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function selectVType(btn) {
+        document.querySelectorAll('.vtype-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active');
+        currentType = btn.dataset.type; selectedSlotId = null;
+        document.getElementById('entry-selected-box').classList.add('hidden'); document.getElementById('entry-confirm-btn').classList.add('hidden');
+        renderEntryMap();
+    }
+
+    function renderEntryMap() {
+        const container = document.getElementById('entry-map'); container.innerHTML = '';
+        const types = ['Car', 'Motorcycle', 'Van', 'Truck'];
+        const icons = { Car: 'fa-car', Motorcycle: 'fa-motorcycle', Van: 'fa-shuttle-van', Truck: 'fa-truck' };
+        let availCount = 0;
+        types.forEach(type => {
+            if (currentType !== type) return;
+            const slots = parkingData.filter(s => s.slot_type === type);
+            const section = document.createElement('div');
+            const header = document.createElement('div'); header.className = 'flex items-center justify-between mb-4';
+            header.innerHTML = `<div class="flex items-center gap-2"><i class="fas ${icons[type]} text-cyan-400/50 text-sm"></i><span class="font-hud text-[10px] tracking-[0.3em] text-cyan-400/50 uppercase">${type} Zone</span></div>`;
+            section.appendChild(header);
+            const grid = document.createElement('div'); grid.className = 'grid grid-cols-5 gap-3';
+            slots.forEach(slot => {
+                const isAvailable = slot.status === 'Available'; if(isAvailable) availCount++; const isSelected = selectedSlotId === slot.id;
+                const div = document.createElement('div');
+                let cls = 'slot-unit rounded-md p-3 flex flex-col items-center justify-center h-24 transition-all ';
+                if(isSelected) cls += 'slot-available selected selected-pulse'; else if(isAvailable) cls += 'slot-available'; else cls += 'slot-occupied';
+                div.className = cls;
+                const label = isAvailable ? slot.slot_number : (slot.vehicle ? slot.vehicle.plate : '---');
+                const statusText = isSelected ? 'SELECTED' : (isAvailable ? 'OPEN' : 'OCCUPIED');
+                const iconColor = isSelected ? 'text-cyan-400' : (isAvailable ? 'text-green-400/60' : 'text-red-400/30');
+                const labelColor = isSelected ? 'text-cyan-400 glow-cyan text-base' : (isAvailable ? 'text-green-400 text-sm' : 'text-red-400/50 text-xs');
+                const statusColor = isSelected ? 'text-cyan-400/60' : (isAvailable ? 'text-green-400/40' : 'text-red-400/30');
+                div.innerHTML = `<i class="fas ${isSelected ? 'fa-check-circle' : icons[type]} ${iconColor} text-base mb-1.5"></i><span class="font-mono font-bold ${labelColor} tracking-wider leading-none">${label}</span><span class="font-mono text-[8px] mt-1.5 ${statusColor} uppercase tracking-wider">${statusText}</span>`;
+                if(isAvailable) div.onclick = () => selectSlot(slot);
+                grid.appendChild(div);
+            });
+            section.appendChild(grid); container.appendChild(section);
+        });
+        document.getElementById('entry-avail-count').textContent = availCount;
+    }
+
+    function selectSlot(slot) {
+        selectedSlotId = slot.id; selectedSlotName = slot.slot_number;
+        document.getElementById('entry-selected-box').classList.remove('hidden');
+        document.getElementById('entry-selected-slot').textContent = slot.slot_number;
+        document.getElementById('entry-confirm-btn').classList.remove('hidden');
+        renderEntryMap();
+    }
+
+    async function confirmEntry() {
+        const plate = document.getElementById('entry-plate').value.trim().toUpperCase();
+        const owner = document.getElementById('entry-owner').value.trim();
+        if(!plate || !owner) { showToast('MISSING PLATE OR OWNER', 'error'); return; }
+        if(!selectedSlotId) { showToast('SELECT A SLOT FIRST', 'error'); return; }
+        try {
+            const res = await fetch('/api/entry', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plate_number: plate, owner_name: owner, vehicle_type: currentType }) });
+            const result = await res.json();
+            if(res.ok) {
+                showToast(`DEPLOYED: ${plate} -> SLOT ${result.slot}`, 'success');
+                document.getElementById('entry-plate').value = ''; document.getElementById('entry-owner').value = '';
+                document.getElementById('entry-selected-box').classList.add('hidden'); document.getElementById('entry-confirm-btn').classList.add('hidden');
+                selectedSlotId = null; fetchSlotData(); renderEntryMap();
+            } else { showToast(result.error || 'ERROR', 'error'); }
+        } catch (err) { showToast('CONNECTION ERROR', 'error'); }
+    }
+
+    function renderExitList() {
+        const container = document.getElementById('exit-parked-list'); container.innerHTML = '';
+        const occupied = parkingData.filter(s => s.status === 'Occupied');
+        const icons = { Car: 'fa-car', Motorcycle: 'fa-motorcycle', Van: 'fa-shuttle-van', Truck: 'fa-truck' };
+        if(occupied.length === 0) { container.innerHTML = '<p class="text-[11px] text-cyan-400/20 text-center py-8 font-mono">NO VEHICLES PARKED</p>'; return; }
+        const grid = document.createElement('div'); grid.className = 'grid grid-cols-3 gap-3';
+        occupied.forEach(slot => {
+            const div = document.createElement('div'); div.className = 'hud-card rounded p-3 cursor-pointer hover:border-cyan-400/40 transition';
+            div.innerHTML = `<div class="flex items-center justify-between mb-2"><i class="fas ${icons[slot.slot_type]} text-cyan-400/30 text-xs"></i><span class="font-mono text-[9px] text-cyan-400/30">${slot.slot_number}</span></div><p class="font-mono text-sm text-cyan-400 font-bold mb-0.5">${slot.vehicle.plate}</p><p class="text-[10px] text-cyan-400/30">${slot.vehicle.owner}</p><button class="hud-btn-danger w-full py-1.5 rounded text-[9px] mt-3">PROCESS EXIT</button>`;
+            div.querySelector('button').onclick = (e) => { e.stopPropagation(); document.getElementById('exit-plate').value = slot.vehicle.plate; processExit(); };
+            grid.appendChild(div);
+        });
+        container.appendChild(grid);
+    }
+
+    async function processExit() {
+        const plate = document.getElementById('exit-plate').value.trim().toUpperCase();
+        if(!plate) { showToast('ENTER PLATE NUMBER', 'error'); return; }
+        try {
+            const res = await fetch('/api/exit/' + plate, { method: 'POST' }); const result = await res.json();
+            if(res.ok) {
+                document.getElementById('exit-form-section').classList.add('hidden'); document.getElementById('exit-receipt').classList.remove('hidden');
+                document.getElementById('rec-plate').textContent = plate; document.getElementById('rec-slot').textContent = result.slot;
+                document.getElementById('rec-duration').textContent = result.duration; document.getElementById('rec-fee').textContent = '$' + (result.fee || 0).toFixed(2);
+                fetchSlotData();
+            } else { showToast(result.error || 'ERROR', 'error'); }
+        } catch (err) { showToast('CONNECTION ERROR', 'error'); }
+    }
+
+    function resetExit() {
+        document.getElementById('exit-plate').value = ''; document.getElementById('exit-form-section').classList.remove('hidden');
+        document.getElementById('exit-receipt').classList.add('hidden'); renderExitList();
+    }
+
+    // FIX: Opens PDF in a new tab for viewing, while CSV downloads normally
+    function generateReport(type) {
+        if(type === 'pdf') {
+            window.open('/api/report/daily_pdf', '_blank');
+            showToast('GENERATING PDF VIEW...', 'success');
+        } else if(type === 'csv') {
+            window.location.href = '/api/report/daily_csv';
+            showToast('GENERATING CSV REPORT...', 'success');
+        }
+    }
+
+    function showToast(message, type) {
+        const container = document.getElementById('toast-container'); const toast = document.createElement('div');
+        const isSuccess = type === 'success'; const borderColor = isSuccess ? 'border-green-400/50' : 'border-red-400/50';
+        const bgColor = isSuccess ? 'bg-green-400/10' : 'bg-red-400/10'; const textColor = isSuccess ? 'text-green-400' : 'text-red-400';
+        const icon = isSuccess ? 'fa-check-circle' : 'fa-exclamation-triangle';
+        toast.className = `toast-hud ${bgColor} border ${borderColor} backdrop-blur-md rounded px-4 py-2.5 flex items-center gap-2.5 ${textColor}`;
+        toast.innerHTML = `<i class="fas ${icon} text-xs"></i><span class="font-mono text-[11px] tracking-wider">${message}</span>`;
+        container.appendChild(toast); setTimeout(() => toast.remove(), 3500);
+    }
+</script>
+</body>
+</html>
